@@ -1,24 +1,35 @@
 import express from 'express';
-import path from 'path';
-import url from 'url';
-import multer from 'multer';
+import jwt from 'jsonwebtoken';
+import cors from 'cors';
+
 const app = express();
 const port = process.env.PORT || 5000;
+const secret = process.env.SECRET || 'SECRET';
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
+const generateToken = data => jwt.sign(data, secret, { expiresIn: '1800s' });
 
-const publicDir = path.join(__dirname, 'public');
-const upload = multer({ dest: path.join(publicDir, 'uploads') });
+// Middleware
+const verifyToken = (req, res, next) => {
+  const { token } = req.headers;
+  jwt.verify(token, secret, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
 
-app.use(express.static(publicDir));
+app.use(cors({ origin: 'http://127.0.0.1:5500' }));
+app.use(express.json());
 
-app.get('/', (req, res) => res.sendFile('index.html'));
+app.post('/login', (req, res) => {
+  const { name, lastname } = req.body;
+  const token = generateToken({ name, lastname });
+  // send token as cookie
+  res.json({ token });
+});
 
-app.post('/upload-profile-pic', upload.single('profile_pic'), (req, res) => {
-  const { file, fileValidationError } = req;
-  if (!file) return res.status(400).send('Please upload a file');
-  if (fileValidationError) return res.status(400).send(fileValidationError);
-  res.send(`<div>Is this your file?: <br/> <img src="uploads/${file.filename}" width="500" /></div>`);
+app.get('/me', verifyToken, (req, res) => {
+  res.json({ secretInfo: req.user });
 });
 
 app.listen(port, () => console.log(`Server running on port http://localhost:${port}`));
